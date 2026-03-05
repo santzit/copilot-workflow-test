@@ -1,0 +1,28 @@
+name: Extract PR Link
+description: Extracts the first GitHub PR URL from an issue body.
+
+inputs:
+  body:
+    description: The issue body text to search.
+    required: true
+
+outputs:
+  pr-link:
+    description: The PR URL found in the body, or a fallback message.
+    value: ${{ steps.extract.outputs.pr-link }}
+
+runs:
+  using: composite
+  steps:
+    - id: extract
+      shell: bash
+      env:
+        ISSUE_BODY: ${{ inputs.body }}
+      run: |
+        pr_link=$(printf '%s' "$ISSUE_BODY" \
+          | grep -oE 'https://github\.com/[^[:space:])]+/pull/[0-9]+' \
+          | head -1)
+        if [ -z "$pr_link" ]; then
+          pr_link="_PR link not found — please add it to the body of this issue_"
+        fi
+        echo "pr-link=$pr_link" >> "$GITHUB_OUTPUT"
