@@ -1,0 +1,78 @@
+name: Feature Request / Task
+description: >
+  Use this template to request a new feature or report a task.
+  The issue will automatically enter the 5-agent pipeline
+  (Architect → Developer → QA → Security → Documentation).
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🤖 5-Agent Pipeline
+        When you submit this issue it will automatically be routed through the
+        **Architect → Developer → QA → Security → Documentation** pipeline.
+        Each agent will create a sub-issue and delegate work to the next stage.
+
+        Add the label **`no-pipeline`** if you do *not* want automatic routing.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One-sentence description of the feature or task.
+      placeholder: "Add a boolean field `is_vip` to the partner model."
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / Business Need
+      description: Why is this needed? What problem does it solve?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance Criteria
+      description: >
+        List the specific, testable conditions that must be true for this issue
+        to be considered done. Use checkboxes.
+      placeholder: |
+        - [ ] Field `is_vip` exists on `res.partner` with type Boolean and default False.
+        - [ ] Field is visible on the partner form view under the "Sales & Purchase" tab.
+        - [ ] Access is restricted to Internal Users.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: >
+        Any extra information, mockups, references, or constraints the Architect
+        should know about.
+
+  - type: dropdown
+    id: odoo_version
+    attributes:
+      label: Odoo Version
+      options:
+        - "16.0"
+        - "17.0"
+        - "Other"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: pipeline_opt_in
+    attributes:
+      label: Pipeline
+      options:
+        - label: >
+            Route this issue through the full 5-agent pipeline
+            (Architect → Developer → QA → Security → Documentation).
+          required: false

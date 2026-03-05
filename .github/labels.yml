@@ -1,0 +1,43 @@
+# GitHub Labels used by the Agent Orchestration Pipeline
+# Apply with: gh label create --force -F .github/labels.yml
+# (or create manually in Settings → Labels)
+
+- name: needs-architect
+  color: "0075ca"
+  description: "Pipeline Stage 1: awaiting Architect agent"
+
+- name: architect-done
+  color: "006b75"
+  description: "Architect stage complete; triggers Dev sub-issue creation"
+
+- name: needs-dev
+  color: "e4e669"
+  description: "Pipeline Stage 2: awaiting Developer agent"
+
+- name: dev-done
+  color: "cfd3d7"
+  description: "Developer stage complete; triggers QA sub-issue creation"
+
+- name: needs-qa
+  color: "d93f0b"
+  description: "Pipeline Stage 3: awaiting QA agent"
+
+- name: qa-done
+  color: "0e8a16"
+  description: "QA stage complete; triggers Security sub-issue creation"
+
+- name: needs-security
+  color: "b60205"
+  description: "Pipeline Stage 4: awaiting Security agent"
+
+- name: security-done
+  color: "1d76db"
+  description: "Security stage complete; triggers Documentation sub-issue creation"
+
+- name: needs-docs
+  color: "5319e7"
+  description: "Pipeline Stage 5: awaiting Documentation agent"
+
+- name: no-pipeline
+  color: "ffffff"
+  description: "Opt out of the automatic 5-agent pipeline"

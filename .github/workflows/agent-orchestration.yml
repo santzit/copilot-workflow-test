@@ -1,0 +1,329 @@
+name: Agent Orchestration Pipeline
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Stage 0 — Triage: assign new issues to the Architect agent
+  # ──────────────────────────────────────────────────────────────────────────
+  triage:
+    name: Triage → Assign to Architect
+    if: >
+      github.event.action == 'opened' &&
+      !contains(github.event.issue.labels.*.name, 'no-pipeline')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label issue as needs-architect
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+              labels: ['needs-architect'],
+            });
+
+      - name: Comment – pipeline started
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: context.issue.number,
+              body: [
+                '## 🚀 Agent Pipeline Started',
+                '',
+                'This issue has entered the **5-agent development pipeline**:',
+                '',
+                '| Stage | Agent | Status |',
+                '|-------|-------|--------|',
+                '| 1 | 🏛️ Architect | 🔄 Pending assignment |',
+                '| 2 | 👨‍💻 Developer | ⏳ Waiting |',
+                '| 3 | 🧪 QA | ⏳ Waiting |',
+                '| 4 | 🔒 Security | ⏳ Waiting |',
+                '| 5 | 📚 Documentation | ⏳ Waiting |',
+                '',
+                '---',
+                '',
+                `@copilot Please act as the **Architect** agent (see \`.github/agents/architect.md\`).`,
+                '',
+                'Analyse this issue, produce an Architecture Document under',
+                '`docs/architecture/`, then create a `[Dev]` sub-issue to delegate',
+                'implementation to the Developer agent.',
+              ].join('\n'),
+            });
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Stage 1 — Architect: create Developer sub-issue scaffold
+  # When someone (or the Architect agent) labels an issue `architect-done`
+  # the workflow opens the [Dev] sub-issue automatically.
+  # ──────────────────────────────────────────────────────────────────────────
+  create-dev-subissue:
+    name: Architect Done → Create [Dev] Sub-Issue
+    if: >
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'architect-done'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create [Dev] sub-issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const parent = context.payload.issue;
+            const parentNum = parent.number;
+            const title   = parent.title.replace(/^\[.*?\]\s*/, '');
+            const slug = title.toLowerCase()
+              .replace(/[^a-z0-9\s-]/g, '')   // remove non-alphanumeric (except spaces/hyphens)
+              .trim()
+              .replace(/\s+/g, '-')            // spaces → hyphens
+              .replace(/-{2,}/g, '-');         // collapse consecutive hyphens
+            const archDoc  = `docs/architecture/${slug}.md`;
+
+            const body = [
+              `## 👨‍💻 Developer Task`,
+              ``,
+              `Parent issue: #${parentNum}`,
+              `Architecture Document: [\`${archDoc}\`](../../blob/main/${archDoc})`,
+              ``,
+              `### What to implement`,
+              `Please read the Architecture Document linked above and implement all`,
+              `deliverables listed under **"File Structure"** and **"Handoff Notes for`,
+              `Dev Agent"**.`,
+              ``,
+              `### Acceptance criteria`,
+              `- [ ] All files in the Architecture Document file structure are created.`,
+              `- [ ] \`pre-commit\` (flake8, pylint-odoo, prettier-xml) passes cleanly.`,
+              `- [ ] Unit tests written and passing.`,
+              `- [ ] Pull Request opened and linked here.`,
+              ``,
+              `---`,
+              `@copilot Please act as the **Developer** agent (see \`.github/agents/developer.md\`).`,
+            ].join('\n');
+
+            const devIssue = await github.rest.issues.create({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              title:  `[Dev] ${title}`,
+              body,
+              labels: ['needs-dev'],
+            });
+
+            // Link as sub-issue via comment on parent
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: parentNum,
+              body: `🏛️ **Architect stage complete.** Developer sub-issue created: #${devIssue.data.number}`,
+            });
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Stage 2 — Developer: create QA sub-issue scaffold
+  # ──────────────────────────────────────────────────────────────────────────
+  create-qa-subissue:
+    name: Dev Done → Create [QA] Sub-Issue
+    if: >
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'dev-done'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (needed for local composite action)
+        uses: actions/checkout@v4
+
+      - name: Extract PR link from issue body
+        id: pr
+        uses: ./.github/actions/extract-pr-link
+        with:
+          body: ${{ github.event.issue.body }}
+
+      - name: Create [QA] sub-issue
+        uses: actions/github-script@v7
+        env:
+          PR_LINK: ${{ steps.pr.outputs.pr-link }}
+        with:
+          script: |
+            const parent = context.payload.issue;
+            const parentNum = parent.number;
+            const title = parent.title.replace(/^\[.*?\]\s*/, '');
+            const prLink = process.env.PR_LINK;
+
+            const body = [
+              `## 🧪 QA Task`,
+              ``,
+              `Parent issue: #${parentNum}`,
+              `Pull Request: ${prLink}`,
+              ``,
+              `### Testing checklist`,
+              `- [ ] All unit tests pass (\`odoo.tests.common\`).`,
+              `- [ ] Fields exist with correct names, types, and defaults.`,
+              `- [ ] Views render fields in the correct position.`,
+              `- [ ] Security rules are applied correctly.`,
+              `- [ ] Translations are complete and correct.`,
+              `- [ ] flake8 / pylint-odoo / prettier-xml pass cleanly.`,
+              ``,
+              `### Output`,
+              `Post a structured QA report as a PR comment (✅ passed / ❌ failed / ⚠️ warnings).`,
+              ``,
+              `---`,
+              `@copilot Please act as the **QA** agent (see \`.github/agents/qa.md\`).`,
+            ].join('\n');
+
+            const qaIssue = await github.rest.issues.create({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              title:  `[QA] ${title}`,
+              body,
+              labels: ['needs-qa'],
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: parentNum,
+              body: `👨‍💻 **Developer stage complete.** QA sub-issue created: #${qaIssue.data.number}`,
+            });
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Stage 3 — QA: create Security sub-issue scaffold
+  # ──────────────────────────────────────────────────────────────────────────
+  create-security-subissue:
+    name: QA Done → Create [Security] Sub-Issue
+    if: >
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'qa-done'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (needed for local composite action)
+        uses: actions/checkout@v4
+
+      - name: Extract PR link from issue body
+        id: pr
+        uses: ./.github/actions/extract-pr-link
+        with:
+          body: ${{ github.event.issue.body }}
+
+      - name: Create [Security] sub-issue
+        uses: actions/github-script@v7
+        env:
+          PR_LINK: ${{ steps.pr.outputs.pr-link }}
+        with:
+          script: |
+            const parent = context.payload.issue;
+            const parentNum = parent.number;
+            const title = parent.title.replace(/^\[.*?\]\s*/, '');
+            const prLink = process.env.PR_LINK;
+
+            const body = [
+              `## 🔒 Security Review Task`,
+              ``,
+              `Parent issue: #${parentNum}`,
+              `Pull Request: ${prLink}`,
+              ``,
+              `### Security checklist`,
+              `- [ ] No hard-coded credentials or API keys.`,
+              `- [ ] \`sudo()\` usage is justified and scoped.`,
+              `- [ ] Domain filters prevent unauthorised data access.`,
+              `- [ ] No sensitive fields exposed to unprivileged groups in views.`,
+              `- [ ] No \`eval\` / \`exec\` / \`unsafe_eval\` usage.`,
+              `- [ ] No raw SQL — ORM used throughout.`,
+              `- [ ] New dependencies checked against GitHub Advisory Database.`,
+              `- [ ] AGPL-3.0 compliance confirmed.`,
+              `- [ ] CodeQL / static analysis alerts investigated and resolved.`,
+              ``,
+              `### Output`,
+              `Post a structured Security Report as a PR comment`,
+              `(🔴 critical / 🟠 high-medium / 🟡 low / ✅ passed).`,
+              ``,
+              `---`,
+              `@copilot Please act as the **Security** agent (see \`.github/agents/security.md\`).`,
+            ].join('\n');
+
+            const secIssue = await github.rest.issues.create({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              title:  `[Security] ${title}`,
+              body,
+              labels: ['needs-security'],
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: parentNum,
+              body: `🧪 **QA stage complete.** Security sub-issue created: #${secIssue.data.number}`,
+            });
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Stage 4 — Security: create Documentation sub-issue scaffold
+  # ──────────────────────────────────────────────────────────────────────────
+  create-docs-subissue:
+    name: Security Done → Create [Docs] Sub-Issue
+    if: >
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'security-done'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (needed for local composite action)
+        uses: actions/checkout@v4
+
+      - name: Extract PR link from issue body
+        id: pr
+        uses: ./.github/actions/extract-pr-link
+        with:
+          body: ${{ github.event.issue.body }}
+
+      - name: Create [Docs] sub-issue
+        uses: actions/github-script@v7
+        env:
+          PR_LINK: ${{ steps.pr.outputs.pr-link }}
+        with:
+          script: |
+            const parent = context.payload.issue;
+            const parentNum = parent.number;
+            const title = parent.title.replace(/^\[.*?\]\s*/, '');
+            const prLink = process.env.PR_LINK;
+
+            const body = [
+              `## 📚 Documentation Task`,
+              ``,
+              `Parent issue: #${parentNum}`,
+              `Pull Request: ${prLink}`,
+              ``,
+              `### Documentation checklist`,
+              `- [ ] \`README.md\` updated with any new features or changes.`,
+              `- [ ] Architecture Document (\`docs/architecture/<slug>.md\`) reflects the final implementation.`,
+              `- [ ] Changelog section added to the Architecture Document.`,
+              `- [ ] All public Python classes/methods have docstrings.`,
+              `- [ ] XML view records have explanatory comments where non-obvious.`,
+              `- [ ] \`i18n/pt_BR.po\` covers all user-visible strings.`,
+              ``,
+              `### Output`,
+              `- Commit documentation updates to the PR branch.`,
+              `- Approve and merge the Pull Request.`,
+              `- Close the original issue with a completion summary.`,
+              ``,
+              `---`,
+              `@copilot Please act as the **Documentation** agent (see \`.github/agents/documentation.md\`).`,
+            ].join('\n');
+
+            const docsIssue = await github.rest.issues.create({
+              owner:  context.repo.owner,
+              repo:   context.repo.repo,
+              title:  `[Docs] ${title}`,
+              body,
+              labels: ['needs-docs'],
+            });
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: parentNum,
+              body: `🔒 **Security stage complete.** Documentation sub-issue created: #${docsIssue.data.number}`,
+            });
