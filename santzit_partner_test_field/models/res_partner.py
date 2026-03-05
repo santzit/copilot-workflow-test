@@ -5,7 +5,7 @@ class ResPartner(models.Model):
     _inherit = "res.partner"
 
     test_field = fields.Boolean(
-        string="Campo de Teste",
-        help="Campo booleano de teste tutorial.",
+        string="Test Field",
+        help="Boolean test field for tutorial.",
         default=False,
     )
