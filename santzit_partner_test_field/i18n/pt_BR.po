@@ -17,12 +17,12 @@ msgstr ""
 
 #. module: santzit_partner_test_field
 #: model:ir.model.fields,field_description:santzit_partner_test_field.field_res_partner__test_field
-msgid "Campo de Teste"
+msgid "Test Field"
 msgstr "Campo de Teste"
 
 #. module: santzit_partner_test_field
 #: model:ir.model.fields,help:santzit_partner_test_field.field_res_partner__test_field
-msgid "Campo booleano de teste tutorial."
+msgid "Boolean test field for tutorial."
 msgstr "Campo booleano de teste tutorial."
 
 #. module: santzit_partner_test_field
